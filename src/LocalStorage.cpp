@@ -9,8 +9,7 @@ bool LocalStorage::initialize()
 {
     Serial.println(F("Initializing Local Storage..."));
 
-    // Initialize EEPROM (AVR boards don't need size parameter)
-    EEPROM.begin();
+    // EEPROM on AVR boards is ready to use, no begin() needed
 
     // Check if storage has been initialized before
     if (!readHeader())

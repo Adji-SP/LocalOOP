@@ -2,11 +2,11 @@
 #include "Config.h"
 #include "SensorData.h"
 #include "LocalStorage.h"
-#include "FirebaseStorage.h"
+// #include "FirebaseStorage.h"  // Firebase not supported on ATmega2560
 
 // Storage instances
 LocalStorage* localStorage;
-FirebaseStorage* firebaseStorage;
+// FirebaseStorage* firebaseStorage;  // Firebase not supported on ATmega2560
 
 // Sensor simulation variables
 float simulatedTemp = 25.0;
@@ -52,13 +52,7 @@ void displayStatus() {
     }
 
     Serial.print(F("Firebase Storage: "));
-    if (firebaseStorage && firebaseStorage->isReady()) {
-        Serial.print(F("OK ("));
-        Serial.print(firebaseStorage->getRecordCount());
-        Serial.println(F(" in buffer)"));
-    } else {
-        Serial.println(F("ERROR"));
-    }
+    Serial.println(F("NOT AVAILABLE (ATmega2560)"));
 
     Serial.print(F("Last Temperature: "));
     Serial.print(simulatedTemp, 2);
@@ -96,7 +90,7 @@ void handleSerialCommands() {
                 break;
 
             case 's':  // Force sync to Firebase
-                firebaseStorage->syncBatch();
+                Serial.println(F("Firebase sync not available on ATmega2560"));
                 break;
 
             case 'e':  // Export to CSV
@@ -136,18 +130,13 @@ void setup() {
 
     // Initialize storage systems
     localStorage = new LocalStorage(MAX_RECORDS, RECORD_SIZE);
-    firebaseStorage = new FirebaseStorage(FIREBASE_HOST, FIREBASE_AUTH, deviceId);
 
     // Initialize local storage
     if (!localStorage->initialize()) {
         Serial.println(F("WARNING: Local storage initialization failed"));
     }
 
-    // Initialize Firebase storage (may fail if no WiFi)
-    if (!firebaseStorage->initialize()) {
-        Serial.println(F("WARNING: Firebase storage initialization failed"));
-        Serial.println(F("System will continue with local storage only"));
-    }
+    Serial.println(F("INFO: Firebase not available on ATmega2560 - using local storage only"));
 
     Serial.println(F("\nSystem ready. Type 'h' for help.\n"));
 }
@@ -168,13 +157,6 @@ void loop() {
         // Save to local storage
         if (!localStorage->saveData(data)) {
             Serial.println(F("ERROR: Failed to save to local storage"));
-        }
-
-        // Save to Firebase (will batch automatically)
-        if (firebaseStorage && firebaseStorage->isReady()) {
-            if (!firebaseStorage->saveData(data)) {
-                Serial.println(F("ERROR: Failed to queue for Firebase"));
-            }
         }
     }
 

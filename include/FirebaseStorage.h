@@ -1,6 +1,3 @@
-#ifndef FIREBASE_STORAGE_H
-#define FIREBASE_STORAGE_H
-
 /**
  * @file FirebaseStorage.h
  * @brief Firebase cloud storage implementation with WiFi connectivity
@@ -10,9 +7,12 @@
  * batching and retry mechanisms for reliable data transmission.
  */
 
+#ifndef FIREBASE_STORAGE_H
+#define FIREBASE_STORAGE_H
+
 #include "Config.h"
 #include "DataStorage.h"
-#include <ArduinoJson.h>
+#include <ArduinoJson.h>  // Keep this - it works fine on MEGA2560
 
 /**
  * @class FirebaseStorage
