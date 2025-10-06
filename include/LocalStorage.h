@@ -28,10 +28,11 @@
  */
 class LocalStorage : public DataStorage {
 private:
-    static const int HEADER_SIZE = 8;      // Size of EEPROM header in bytes
+    static const int HEADER_SIZE = 10;     // Header: magic(2) + version(1) + index(2) + count(2) + checksum(1) + reserved(2)
     static const int RECORD_START = HEADER_SIZE;  // Start address for data records
+    static const uint8_t STORAGE_VERSION = 1;     // Version for compatibility checks
     int maxRecords;        // Maximum number of records that can be stored
-    int recordSize;        // Size of each record in bytes
+    int recordSize;        // Size of each record in bytes (includes 2-byte length prefix)
     int currentIndex;      // Current write position (circular buffer)
     int recordCount;       // Number of records currently stored
 

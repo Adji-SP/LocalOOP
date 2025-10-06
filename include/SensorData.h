@@ -3,82 +3,141 @@
 
 /**
  * @file SensorData.h
- * @brief Data structure for sensor readings and serialization methods
+ * @brief Dynamic data structure for sensor readings
  *
- * This file defines the core data structure used throughout the system
- * for storing, transmitting, and persisting sensor measurements.
+ * This file defines a flexible data structure that adapts to different
+ * sensor configurations defined in SensorConfig.h
  */
 
-#include "Config.h"
+#include "SystemConfig.h"
 #include <Arduino.h>
 
 /**
  * @struct SensorData
- * @brief Container for all sensor measurements and metadata
+ * @brief Dynamic container for sensor measurements
  *
- * This structure holds a complete sensor reading including:
- * - Temperature from RTD sensor (°C)
- * - Weight from load cell (kg)
- * - Timestamp when measurement was taken (milliseconds since boot)
+ * This structure adapts based on SENSOR_CONFIG selection:
+ * - Stores up to 6 sensor values (flexible)
+ * - Timestamp when measurement was taken
  * - Status code indicating measurement validity
  */
 struct SensorData {
-    float temperature;          // Temperature reading in Celsius
-    float weight;              // Weight reading in kilograms
+    float values[6];            // Sensor values (up to 6 sensors)
     unsigned long timestamp;    // Time of measurement (millis() value)
     uint8_t status;            // Status: 1=OK, 0=Error
 
+    // Accessor methods for clearer code
+    void setTemperature(float temp) { values[0] = temp; }
+    void setWeight(float wt) { values[1] = wt; }
+    float getTemperature() const { return values[0]; }
+    float getWeight() const { return values[1]; }
+
+    // Generic accessor
+    void setValue(int index, float value) {
+        if (index >= 0 && index < SENSOR_COUNT) values[index] = value;
+    }
+    float getValue(int index) const {
+        return (index >= 0 && index < SENSOR_COUNT) ? values[index] : 0.0;
+    }
+
+    // Legacy reference accessors (for backward compatibility)
+    float& temperature() { return values[0]; }
+    float& weight() { return values[1]; }
+    const float& temperature() const { return values[0]; }
+    const float& weight() const { return values[1]; }
+
     /**
-     * @brief Convert sensor data to CSV format for local storage
+     * @brief Convert sensor data to CSV format (dynamic based on sensor config)
      * @return String containing comma-separated values
      *
-     * Format: timestamp,temperature,weight,status
-     * Example: "12345,25.50,100.25,1"
+     * Format adapts to SENSOR_COUNT from SensorConfig.h
+     * Example: "12345,25.50,100.25,1" for 2 sensors
      */
     String toCSV() const {
-        return String(timestamp) + "," +
-               String(temperature, 2) + "," +
-               String(weight, 2) + "," +
-               String(status);
+        String csv = String(timestamp);
+        for (int i = 0; i < SENSOR_COUNT; i++) {
+            csv += "," + String(values[i], 2);
+        }
+        csv += "," + String(status);
+        return csv;
     }
 
     /**
-     * @brief Parse CSV string back into SensorData structure
+     * @brief Parse CSV string back into SensorData structure (dynamic)
      * @param csv Comma-separated string to parse
      * @return true if parsing successful, false on error
      *
-     * Validates CSV format and converts string values back to appropriate types.
-     * Returns false if the CSV format is invalid or missing required fields.
+     * Automatically adapts to sensor count from SensorConfig.h
      */
     bool fromCSV(const String& csv) {
-        int firstComma = csv.indexOf(',');
-        int secondComma = csv.indexOf(',', firstComma + 1);
-        int thirdComma = csv.indexOf(',', secondComma + 1);
+        int pos = 0;
+        int nextComma = csv.indexOf(',');
 
-        if (firstComma == -1 || secondComma == -1 || thirdComma == -1) {
-            return false;
+        if (nextComma == -1) return false;
+
+        // Parse timestamp
+        timestamp = strtoul(csv.substring(0, nextComma).c_str(), NULL, 10);
+        pos = nextComma + 1;
+
+        // Parse sensor values dynamically
+        for (int i = 0; i < SENSOR_COUNT; i++) {
+            nextComma = csv.indexOf(',', pos);
+            if (nextComma == -1 && i < SENSOR_COUNT - 1) return false;
+
+            if (i == SENSOR_COUNT - 1) {
+                // Last sensor value
+                int statusComma = csv.indexOf(',', pos);
+                if (statusComma == -1) return false;
+                values[i] = csv.substring(pos, statusComma).toFloat();
+                pos = statusComma + 1;
+            } else {
+                values[i] = csv.substring(pos, nextComma).toFloat();
+                pos = nextComma + 1;
+            }
         }
 
-        timestamp = strtoul(csv.substring(0, firstComma).c_str(), NULL, 10);
-        temperature = csv.substring(firstComma + 1, secondComma).toFloat();
-        weight = csv.substring(secondComma + 1, thirdComma).toFloat();
-        status = csv.substring(thirdComma + 1).toInt();
+        // Parse status
+        status = csv.substring(pos).toInt();
 
         return true;
     }
 
     /**
-     * @brief Convert sensor data to JSON format for Firebase transmission
+     * @brief Convert sensor data to JSON format for Firebase (dynamic)
      * @return String containing JSON object
      *
-     * Creates a JSON object suitable for Firebase Realtime Database.
-     * Format: {"timestamp":12345,"temperature":25.50,"weight":100.25,"status":1}
+     * Creates a JSON object that adapts to sensor configuration.
+     * Example: {"timestamp":12345,"accel_x":1.2,"accel_y":0.5,...}
      */
     String toJSON() const {
-        return "{\"timestamp\":" + String(timestamp) +
-               ",\"temperature\":" + String(temperature, 2) +
-               ",\"weight\":" + String(weight, 2) +
-               ",\"status\":" + String(status) + "}";
+        String json = "{\"timestamp\":" + String(timestamp);
+
+        // Add sensor fields dynamically based on configuration
+        #ifdef SENSOR_CONFIG_TEMP_WEIGHT
+            json += ",\"temperature\":" + String(values[0], 2);
+            json += ",\"weight\":" + String(values[1], 2);
+        #elif defined(SENSOR_CONFIG_MPU6050)
+            json += ",\"accel_x\":" + String(values[0], 2);
+            json += ",\"accel_y\":" + String(values[1], 2);
+            json += ",\"accel_z\":" + String(values[2], 2);
+            json += ",\"gyro_x\":" + String(values[3], 2);
+            json += ",\"gyro_y\":" + String(values[4], 2);
+            json += ",\"gyro_z\":" + String(values[5], 2);
+        #elif defined(SENSOR_CONFIG_TEMP_HUMIDITY)
+            json += ",\"temperature\":" + String(values[0], 2);
+            json += ",\"humidity\":" + String(values[1], 2);
+        #elif defined(SENSOR_CONFIG_DISTANCE_LIGHT)
+            json += ",\"distance\":" + String(values[0], 2);
+            json += ",\"light\":" + String(values[1], 0);
+        #else
+            // Generic fallback
+            for (int i = 0; i < SENSOR_COUNT; i++) {
+                json += ",\"value" + String(i) + "\":" + String(values[i], 2);
+            }
+        #endif
+
+        json += ",\"status\":" + String(status) + "}";
+        return json;
     }
 };
 
