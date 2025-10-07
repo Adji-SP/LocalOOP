@@ -6,7 +6,7 @@
 .vscode/ipch
 
 # IMPORTANT: Protect sensitive credentials
-include/SystemConfig.h
+
 
 # Build artifacts
 *.o
