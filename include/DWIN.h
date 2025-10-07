@@ -44,6 +44,7 @@ public:
     // Using Arduino Board
     #else
     DWIN(uint8_t rx=ARDUINO_RX_PIN, uint8_t tx=ARDUINO_TX_PIN, long baud=DWIN_DEFAULT_BAUD_RATE);
+    DWIN(HardwareSerial& port, long baud=DWIN_DEFAULT_BAUD_RATE);  // For hardware serial (Serial2)
     #endif
 
 

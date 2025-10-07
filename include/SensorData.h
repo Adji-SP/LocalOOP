@@ -25,6 +25,8 @@ struct SensorData {
     float values[6];            // Sensor values (up to 6 sensors)
     unsigned long timestamp;    // Time of measurement (millis() value)
     uint8_t status;            // Status: 1=OK, 0=Error
+    uint8_t relay1;            // Relay 1 state (SSR): 0=OFF, 1=ON
+    uint8_t relay2;            // Relay 2 state: 0=OFF, 1=ON
 
     // Accessor methods for clearer code
     void setTemperature(float temp) { values[0] = temp; }

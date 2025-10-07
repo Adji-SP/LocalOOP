@@ -34,11 +34,19 @@
     }
 
 #else
+    // SoftwareSerial constructor
     DWIN::DWIN(uint8_t rx, uint8_t tx, long baud) {
         localSWserial = new SoftwareSerial(rx, tx);
         localSWserial->begin(baud);
         _baud = baud;
         init((Stream *)localSWserial, true);
+    }
+
+    // HardwareSerial constructor (for Serial2 on MEGA)
+    DWIN::DWIN(HardwareSerial& port, long baud) {
+        port.begin(baud);
+        _baud = baud;
+        init((Stream *)&port, false);  // false = not software serial
     }
 
 #endif
@@ -104,8 +112,8 @@ byte DWIN::getPage(){
 void DWIN::setText(long address, String textData){
 
     int dataLen = textData.length();
-    byte startCMD[] = {CMD_HEAD1, CMD_HEAD2, dataLen+3 , CMD_WRITE, 
-    (address >> 8) & 0xFF, (address) & 0xFF};
+    byte startCMD[] = {CMD_HEAD1, CMD_HEAD2, (byte)(dataLen+3), CMD_WRITE,
+    (byte)((address >> 8) & 0xFF), (byte)(address & 0xFF)};
     byte dataCMD[dataLen];textData.getBytes(dataCMD, dataLen+1);
     byte sendBuffer[6+dataLen];
 
@@ -119,7 +127,7 @@ void DWIN::setText(long address, String textData){
 // Set Data on VP Address
 void DWIN::setVP(long address, byte data){
     // 0x5A, 0xA5, 0x05, 0x82, 0x40, 0x20, 0x00, state
-    byte sendBuffer[] = {CMD_HEAD1, CMD_HEAD2, 0x05 , CMD_WRITE, (address >> 8) & 0xFF, (address) & 0xFF, 0x00, data};
+    byte sendBuffer[] = {CMD_HEAD1, CMD_HEAD2, 0x05, CMD_WRITE, (byte)((address >> 8) & 0xFF), (byte)(address & 0xFF), 0x00, data};
     _dwinSerial->write(sendBuffer, sizeof(sendBuffer));
     readDWIN();
 }

@@ -2,7 +2,6 @@
 #include "Config.h"
 #include "SensorData.h"
 #include "LocalStorage.h"
-// #include "FirebaseStorage.h"
 #include "DWIN.h"
 // #include "FirebaseStorage.h"  // Firebase not supported on ATmega2560
 
