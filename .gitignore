@@ -5,9 +5,6 @@
 .vscode/launch.json
 .vscode/ipch
 
-# IMPORTANT: Protect sensitive credentials
-
-
 # Build artifacts
 *.o
 *.elf

@@ -23,9 +23,10 @@
 #define WIFI_PASSWORD "akudeweyolali"
 
 // Firebase Settings
-#define API_KEY "AIzaSyAbU6hfeRRIUNVL3fmAOa8AtrQVpTcnuos"
-#define DATABASE_URL "https://masgilang-304d2-default-rtdb.firebaseio.com"
-#define FIREBASE_HOST "masgilang-304d2-default-rtdb.firebaseio.com"
+#define API_KEY "AIzaSyAy_rEJKUADnKA22-IrKSYwVZg8nfawxRI"
+#define FIREBASE_PROJECT_ID "tembakau-c9744"  // Your Firebase Project ID
+#define DATABASE_URL "https://tembakau-c9744-default-rtdb.firebaseio.com"
+#define FIREBASE_HOST "tembakau-c9744-default-rtdb.firebaseio.com"
 #define FIREBASE_AUTH ""
 
 // Device Identity

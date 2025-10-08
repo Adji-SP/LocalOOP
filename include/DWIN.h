@@ -41,10 +41,11 @@ public:
     DWIN(SoftwareSerial& port, long baud=DWIN_DEFAULT_BAUD_RATE);
     DWIN(Stream& port, uint8_t long baud=DWIN_DEFAULT_BAUD_RATE);
 
-    // Using Arduino Board
+    // Using Arduino Board (Uno, Mega, etc.)
     #else
-    DWIN(uint8_t rx=ARDUINO_RX_PIN, uint8_t tx=ARDUINO_TX_PIN, long baud=DWIN_DEFAULT_BAUD_RATE);
-    DWIN(HardwareSerial& port, long baud=DWIN_DEFAULT_BAUD_RATE);  // For hardware serial (Serial2)
+    DWIN(uint8_t rx=ARDUINO_RX_PIN, uint8_t tx=ARDUINO_TX_PIN, long baud=DWIN_DEFAULT_BAUD_RATE);  // SoftwareSerial (Uno)
+    DWIN(HardwareSerial& port, long baud=DWIN_DEFAULT_BAUD_RATE);  // HardwareSerial (Mega)
+    DWIN(HardwareSerial& port, uint8_t receivePin, uint8_t transmitPin, long baud=DWIN_DEFAULT_BAUD_RATE);  // HardwareSerial with pins (Mega - pins ignored)
     #endif
 
 
@@ -69,6 +70,8 @@ public:
     void setText(long address, String textData);
     // set Byte on VP Address
     void setVP(long address, byte data);
+    // set Word (16-bit) on VP Address for icon/button states
+    void writeWord(long address, unsigned int data);
     // beep Buzzer for 1 sec
     void beepHMI();
     // Callback Function

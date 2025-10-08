@@ -12,10 +12,10 @@
 #include <ArduinoJson.h>
 #include <Firebase_ESP_Client.h>
 #include <addons/TokenHelper.h>
-#include <addons/RTDBHelper.h>
 #include "SystemConfig.h"
 #include "SensorData.h"
 #include "LocalStorage.h"
+#include "TimeSync.h"
 
 // Firebase
 FirebaseData fbdo;
@@ -28,9 +28,13 @@ bool firebaseReady = false;
 // LocalStorage instance (reuse MEGA's class!)
 LocalStorage *localStorage;
 
+// TimeSync instance
+TimeSync timeSync;
+
 // Timing
 unsigned long lastStatusTime = 0;
 unsigned long lastWiFiCheck = 0;
+unsigned long lastTimeBroadcast = 0;
 
 // Connect WiFi
 void connectWiFi()
@@ -54,7 +58,6 @@ void connectWiFi()
         Serial.println(DATABASE_URL);
 
         config.api_key = API_KEY;
-        config.database_url = DATABASE_URL;
         config.timeout.serverResponse = 10 * 1000;
 
         Serial.println("STATUS:Signing in anonymously...");
@@ -77,7 +80,7 @@ void connectWiFi()
     }
 }
 
-// Upload all EEPROM data to Firebase
+// Upload all EEPROM data to Firestore
 int uploadAllData()
 {
     if (!wifiConnected)
@@ -107,57 +110,55 @@ int uploadAllData()
         if (!localStorage->retrieveData(data, i))
             continue;
 
-        // Use char buffer to avoid String memory leaks
-        char path[80];
-        snprintf(path, sizeof(path), "%s/%lu", FB_DATA_PATH, data.timestamp);
+        // Create Firestore document path: sensor_data/{timestamp}
+        char documentPath[128];
+        snprintf(documentPath, sizeof(documentPath), "sensor_data/%lu", data.timestamp);
 
-        char tempPath[100], weightPath[100], statusPath[100], relay1Path[100], relay2Path[100];
-        snprintf(tempPath, sizeof(tempPath), "%s/temp", path);
-        snprintf(weightPath, sizeof(weightPath), "%s/weight", path);
-        snprintf(statusPath, sizeof(statusPath), "%s/status", path);
-        snprintf(relay1Path, sizeof(relay1Path), "%s/relay1", path);
-        snprintf(relay2Path, sizeof(relay2Path), "%s/relay2", path);
+        // Create JSON document with all fields
+        FirebaseJson json;
+        json.set("fields/temp/doubleValue", data.temperature());
+        json.set("fields/weight/doubleValue", data.weight());
+        json.set("fields/ka/doubleValue", data.kadarAir);  // Added moisture content!
+        json.set("fields/relay1/integerValue", String(data.relay1));
+        json.set("fields/relay2/integerValue", String(data.relay2));
+        json.set("fields/status/integerValue", String(data.status));
+        json.set("fields/device/stringValue", DEVICE_NAME);
+        json.set("fields/timestamp/integerValue", String(data.timestamp));
 
-        // Upload one field at a time to save memory
-        bool success = true;
-
-        if (Firebase.RTDB.setFloat(&fbdo, tempPath, data.temperature())) {
-            if (Firebase.RTDB.setFloat(&fbdo, weightPath, data.weight())) {
-                if (Firebase.RTDB.setInt(&fbdo, statusPath, data.status)) {
-                    if (Firebase.RTDB.setInt(&fbdo, relay1Path, data.relay1)) {
-                        if (Firebase.RTDB.setInt(&fbdo, relay2Path, data.relay2)) {
-                            uploaded++;
-                            Serial.print("STATUS:OK ");
-                            Serial.print(uploaded);
-                            Serial.print("/");
-                            Serial.println(totalRecords);
-                        } else {
-                            success = false;
-                        }
-                    } else {
-                        success = false;
-                    }
-                } else {
-                    success = false;
-                }
-            } else {
-                success = false;
-            }
-        } else {
-            success = false;
+        // Upload to Firestore using patchDocument (creates or updates)
+        // This prevents "Document already exists" errors
+        if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath, json.raw(), ""))
+        {
+            uploaded++;
+            Serial.print("STATUS:OK ");
+            Serial.print(uploaded);
+            Serial.print("/");
+            Serial.println(totalRecords);
         }
-
-        if (!success)
+        else
         {
             Serial.print("STATUS:Upload error: ");
             Serial.println(fbdo.errorReason());
-            break;
+
+            // If error is "Not Found", try createDocument as fallback
+            if (String(fbdo.errorReason()).indexOf("NOT_FOUND") >= 0)
+            {
+                if (Firebase.Firestore.createDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath, json.raw()))
+                {
+                    uploaded++;
+                    Serial.println("STATUS:Created new document");
+                }
+            }
+            else
+            {
+                break; // Stop on other errors
+            }
         }
 
         if (!wifiConnected)
             break;
 
-        delay(100); // Small delay between uploads
+        delay(200); // Delay between Firestore writes (slower than RTDB)
         yield(); // Let ESP8266 handle WiFi
     }
 
@@ -200,6 +201,22 @@ void setup()
     if (wifiConnected)
     {
         Serial.println("STATUS:WiFi connected!");
+
+        // Initialize time sync
+        Serial.println("TIME:Initializing time sync...");
+        if (timeSync.begin())
+        {
+            Serial.print("TIME:Synced! Unix time: ");
+            Serial.println(timeSync.getUnixTime());
+
+            // Send time to Mega immediately
+            Serial.print("TIME:");
+            Serial.println(timeSync.getUnixTime());
+        }
+        else
+        {
+            Serial.println("TIME:Failed to sync, will retry...");
+        }
     }
     else
     {
@@ -212,6 +229,17 @@ void setup()
 void loop()
 {
     unsigned long currentTime = millis();
+
+    // Update time sync (auto re-sync every 24h)
+    timeSync.update();
+
+    // Broadcast time to Mega every 60 seconds
+    if (timeSync.isSynced() && (currentTime - lastTimeBroadcast >= 60000))
+    {
+        lastTimeBroadcast = currentTime;
+        Serial.print("TIME:");
+        Serial.println(timeSync.getUnixTime());
+    }
 
     // Check WiFi every 30 seconds
     if (currentTime - lastWiFiCheck >= 30000)
@@ -227,6 +255,12 @@ void loop()
         {
             connectWiFi();
             wifiConnected = true;
+
+            // Try to sync time if not synced yet
+            if (!timeSync.isSynced())
+            {
+                timeSync.syncTimeFromAPI();
+            }
         }
     }
 
@@ -253,17 +287,29 @@ void loop()
 
             if (!error)
             {
-                // Convert JSON to SensorData (stores temp, weight, relay states)
+                // Convert JSON to SensorData (stores temp, weight, ka, relay states)
                 SensorData data;
                 data.temperature() = doc["temp"] | 0.0;
                 data.weight() = doc["weight"] | 0.0;
+                data.kadarAir = doc["ka"] | 0.0;  // Now saving kadar air!
                 data.relay1 = doc["relay1"] | 0;
                 data.relay2 = doc["relay2"] | 0;
-                data.timestamp = doc["ts"] | 0;
-                data.status = STATUS_OK;
 
-                // Note: Kadar Air (ka) is received but not stored in EEPROM
-                // It's displayed on HMI and sent to Firebase in real-time
+                // Use real Unix timestamp if time is synced, otherwise use millis
+                if (timeSync.isSynced())
+                {
+                    data.timestamp = timeSync.getUnixTime();
+                    Serial.print("DATA:Using Unix time: ");
+                    Serial.println(data.timestamp);
+                }
+                else
+                {
+                    data.timestamp = millis() / 1000; // Fallback to millis
+                    Serial.print("DATA:Using millis (time not synced): ");
+                    Serial.println(data.timestamp);
+                }
+
+                data.status = STATUS_OK;
 
                 // Save to EEPROM using LocalStorage
                 if (localStorage->saveData(data))

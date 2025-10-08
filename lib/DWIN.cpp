@@ -34,7 +34,7 @@
     }
 
 #else
-    // SoftwareSerial constructor
+    // SoftwareSerial constructor (for Arduino Uno)
     DWIN::DWIN(uint8_t rx, uint8_t tx, long baud) {
         localSWserial = new SoftwareSerial(rx, tx);
         localSWserial->begin(baud);
@@ -42,11 +42,25 @@
         init((Stream *)localSWserial, true);
     }
 
-    // HardwareSerial constructor (for Serial2 on MEGA)
+    // HardwareSerial constructor (for Serial1/Serial2/Serial3 on MEGA)
     DWIN::DWIN(HardwareSerial& port, long baud) {
         port.begin(baud);
         _baud = baud;
         init((Stream *)&port, false);  // false = not software serial
+    }
+
+    // HardwareSerial constructor with pin parameters (for Arduino Mega compatibility)
+    // Note: On AVR, serial pins are fixed in hardware, so receivePin/transmitPin are ignored
+    // This constructor exists for API compatibility with ESP32 code
+    DWIN::DWIN(HardwareSerial& port, uint8_t receivePin, uint8_t transmitPin, long baud) {
+        // On AVR (Mega), hardware serial pins are fixed:
+        // Serial1: RX1=19, TX1=18
+        // Serial2: RX2=16, TX2=17
+        // Serial3: RX3=15, TX3=14
+        // We ignore receivePin/transmitPin parameters
+        port.begin(baud);
+        _baud = baud;
+        init((Stream *)&port, false);
     }
 
 #endif
@@ -128,6 +142,15 @@ void DWIN::setText(long address, String textData){
 void DWIN::setVP(long address, byte data){
     // 0x5A, 0xA5, 0x05, 0x82, 0x40, 0x20, 0x00, state
     byte sendBuffer[] = {CMD_HEAD1, CMD_HEAD2, 0x05, CMD_WRITE, (byte)((address >> 8) & 0xFF), (byte)(address & 0xFF), 0x00, data};
+    _dwinSerial->write(sendBuffer, sizeof(sendBuffer));
+    readDWIN();
+}
+
+// Set Word (16-bit) on VP Address for icon/button states
+void DWIN::writeWord(long address, unsigned int data){
+    byte sendBuffer[] = {CMD_HEAD1, CMD_HEAD2, 0x05, CMD_WRITE,
+                        (byte)((address >> 8) & 0xFF), (byte)(address & 0xFF),
+                        (byte)((data >> 8) & 0xFF), (byte)(data & 0xFF)};
     _dwinSerial->write(sendBuffer, sizeof(sendBuffer));
     readDWIN();
 }
